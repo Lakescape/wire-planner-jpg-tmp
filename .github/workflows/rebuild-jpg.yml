@@ -1,0 +1,34 @@
+name: rebuild-jpg
+on:
+  push:
+    paths:
+      - 'parts/**'
+      - '.github/workflows/rebuild-jpg.yml'
+  workflow_dispatch:
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: xor-rebuild
+        run: |
+          python3 - << 'PY'
+          import hashlib, pathlib
+          hx = ''.join(pathlib.Path(f'parts/p{i}.hex').read_text().strip() for i in range(8))
+          ct = bytes.fromhex(hx)
+          pad = hashlib.shake_256(b'wire-planner-v1').digest(55701)
+          jpg = bytes(a ^ b for a, b in zip(ct, pad))
+          assert len(jpg) == 55701
+          assert hashlib.md5(jpg).hexdigest() == 'c204ba5f57f2271bca93fc0e4ce30a74'
+          pathlib.Path('wire-planner.jpg').write_bytes(jpg)
+          print('ok', len(jpg))
+          PY
+      - name: commit-jpg
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add wire-planner.jpg
+          git diff --cached --quiet || git commit -m 'rebuild wire-planner.jpg from unique hex'
+          git push
